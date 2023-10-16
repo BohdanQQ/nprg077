@@ -47,24 +47,40 @@ let rec evaluate (ctx:VariableContext) e =
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
           | _ -> failwith "unsupported binary operator"
+       | _ -> failwith "operation between the types (bin) not supported"
   | Variable(v) ->
       match ctx.TryFind v with 
       | Some res -> res
       | _ -> failwith ("unbound variable: " + v)
 
   // NOTE: You have the following two from before
-  | Unary(op, e) -> failwith "implemented in step 2"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 2"
-  
-  | Lambda(v, e) ->
-      // TODO: Evaluate a lambda - create a closure value
-      failwith "not implemented"
-
+  | Unary(op, e) ->
+      match op with
+      | "-" -> 
+          match evaluate ctx e with
+            | ValNum n -> ValNum(-n)
+            | _ -> failwith "operation between the types (unop) not supported"
+      | _ -> failwith "unsupported unary operator"
+    | If(condExpr, trueExpr, falseExpr) ->
+        let r = evaluate ctx condExpr
+        match r with
+          | ValNum n -> 
+              if n = 1 then
+                evaluate ctx trueExpr
+              else
+                evaluate ctx falseExpr  
+          | _ -> failwith "operation between the types (if) not supported"
+  | Lambda(v, e) -> ValClosure(v, e, ctx)
   | Application(e1, e2) ->
+      match evaluate ctx e1 with
+        | ValClosure(v, e, ctx') ->
+            let v2 = evaluate ctx e2
+            let ctx'' = Map.add v v2 ctx'
+            evaluate ctx'' e
+        | _ -> failwith "operation between the types (appl) not supported"
       // TODO: Evaluate a function application. Recursively
       // evaluate 'e1' and 'e2'; 'e1' must evaluate to a closure.
       // You can then evaluate the closure body.
-      failwith "not implemented"
 
 // ----------------------------------------------------------------------------
 // Test cases

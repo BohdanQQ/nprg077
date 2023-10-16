@@ -21,15 +21,9 @@ and Expression =
   | TupleGet of bool * Expression
   | Case of bool * Expression
   | Match of Expression * string * Expression * Expression
-  // NOTE: A recursive definition. You can think of 
-  // 'Let(v, e1, e2)' as 'let rec v = e1 in e2'. 
   | Recursive of string * Expression * Expression
 
 and VariableContext = 
-  // NOTE: For recursive calls, we need to add the function
-  // being defined to the variable context when defining it.
-  // This can be done using 'let rec', but we need to store
-  // the variables as lazy values.
   Map<string, Lazy<Value>>
 
 // ----------------------------------------------------------------------------
@@ -48,30 +42,64 @@ let rec evaluate (ctx:VariableContext) e =
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
           | _ -> failwith "unsupported binary operator"
-      | _ -> failwith "invalid argument of binary operator"
+       | _ -> failwith "operation between the types (bin) not supported"
   | Variable(v) ->
       match ctx.TryFind v with 
-      | Some res ->
-          // NOTE: As 'res' is now 'Lazy<Value>' we need to get its value here.
-          res.Value
+      | Some res -> res.Value
       | _ -> failwith ("unbound variable: " + v)
+  | Unary(op, e) ->
+      match op with
+      | "-" -> 
+          match evaluate ctx e with
+            | ValNum n -> ValNum(-n)
+            | _ -> failwith "operation between the types (unop) not supported"
+      | _ -> failwith "unsupported unary operator"
+    | If(condExpr, trueExpr, falseExpr) ->
+        let r = evaluate ctx condExpr
+        match r with
+          | ValNum n -> 
+              if n = 1 then
+                evaluate ctx trueExpr
+              else
+                evaluate ctx falseExpr  
+          | _ -> failwith "operation between the types (if) not supported"
+  | Lambda(v, e) -> ValClosure(v, e, ctx)
+  | Application(body, arg) ->
+      match evaluate ctx body with
+        | ValClosure(v, e, closureCtx) ->
+            let argVal = evaluate ctx arg
+            let callCtx = Map.add v (lazy(argVal)) closureCtx
+            evaluate callCtx e
+        | _ -> failwith "operation between the types (appl) not supported"
+  | Let(v, e1, e2) ->
+    let ctx2 = Map.add v (lazy(evaluate ctx e1)) ctx
+    evaluate ctx2 e2
+    // failwith "not implemented"
+  | Tuple(e1, e2) ->
+      ValTuple(evaluate ctx e1, evaluate ctx e2)
+  | TupleGet(b, e) ->
+      match evaluate ctx e with
+        | ValTuple(v1, v2) ->
+            if b then
+                v1
+            else
+                v2
+        | _ -> failwith "operation between the types (tupleget) not supported"
 
-  // NOTE: You have the following from before
-  | Unary(op, e) -> failwith "implemented in step 2"
-  | If(econd, etrue, efalse) -> failwith "implemented in step 2"
-  | Lambda(v, e) -> failwith "implemented in step 3"
-  | Application(e1, e2) -> failwith "implemented in step 3"
-  | Let(v, e1, e2) -> failwith "implemented in step 4"
-  | Tuple(e1, e2) -> failwith "implemented in step 5"
-  | TupleGet(b, e) -> failwith "implemented in step 5"
-  | Match(e, v, e1, e2) -> failwith "implemented in step 6"
-  | Case(b, e) -> failwith "implemented in step 6"
+  | Match(e, v, e1, e2) ->
+      match evaluate ctx e with
+        | ValCase(b,caseVal) -> 
+            let newCtx = Map.add v (lazy(caseVal)) ctx
+            if b then
+                evaluate newCtx e1
+            else
+                evaluate newCtx e2
+        | _ -> failwith "operation between the types (match) not supported"
+  | Case(b, e) -> ValCase(b, evaluate ctx e)
 
   | Recursive(v, e1, e2) ->
-      // TODO: Implement recursion for 'let rec v = e1 in e2'.
-      // (In reality, this will only work if 'e1' is a function
-      // but the case can be implemented without assuming that).
-      failwith "not implemented"
+    let rec ctx' = Map.add v (lazy(evaluate ctx' e1)) ctx
+    evaluate ctx' e2
 
 // ----------------------------------------------------------------------------
 // Test cases

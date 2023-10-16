@@ -44,9 +44,19 @@ let rec evaluate (ctx:VariableContext) e =
       | Some res -> res
       | _ -> failwith ("unbound variable: " + v)
   | Unary(op, e) ->
-      // TODO: Implement the case for 'Unary' here!
-      failwith "not implemented"
-  // TODO: Add the correct handling of 'If' here!
+      match op with
+      | "-" -> 
+          match evaluate ctx e with
+            | ValNum n -> ValNum(-n)
+      | _ -> failwith "unsupported unary operator"
+    | If(condExpr, trueExpr, falseExpr) ->
+        let r = evaluate ctx condExpr
+        match r with
+          | ValNum n -> 
+              if n = 1 then
+                evaluate ctx trueExpr
+              else
+                evaluate ctx falseExpr
 
 
 // ----------------------------------------------------------------------------
@@ -85,4 +95,10 @@ let eif3 =
   )
 evaluate Map.empty eif3
 
-
+// Conditional expression: if 5+4 then 0 else 21*2 
+let eif4 = 
+  If(Binary("+", Constant(5), Constant(-5)), 
+    Constant(0),
+    Binary("*", Constant(21), Constant(2))
+  )
+evaluate Map.empty eif4
