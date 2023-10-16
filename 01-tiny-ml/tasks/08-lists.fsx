@@ -43,6 +43,7 @@ let rec evaluate (ctx:VariableContext) e =
           match op with 
           | "+" -> ValNum(n1 + n2)
           | "*" -> ValNum(n1 * n2)
+          | "%" -> ValNum(n1 % n2)
           | _ -> failwith "unsupported binary operator"
        | _ -> failwith "operation between the types (bin) not supported"
   | Variable(v) ->
@@ -168,13 +169,13 @@ let ef =  Recursive("filter",
         Variable("l"), "x",
         If(
             Application(Variable "f", TupleGet(true, Variable "x")),
-            Tuple(TupleGet(true, Variable "x"), Application(Application(Variable "filter", Variable "f"), TupleGet(false, Variable "x"))),
+            Case(true, Tuple(TupleGet(true, Variable "x"), Application(Application(Variable "filter", Variable "f"), TupleGet(false, Variable "x")))),
             Application(Application(Variable "filter", Variable "f"), TupleGet(false, Variable "x"))
         ),
         Case(false, Unit)
       )
     )),
     Application(Application(Variable "filter", 
-      Lambda("y", Binary("+", Variable "y", Unary("-", Constant(2))))), el)
+      Lambda("y", Binary("%", Variable "y", Constant(2)))), el)
   )
 evaluate Map.empty ef
