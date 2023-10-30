@@ -33,40 +33,44 @@ type State =
 
 let printValue value = 
   // TODO: Take 'value' of type 'Value', pattern match on it and print it nicely.
-  failwith "not implemented"
+  match value with
+    | StringValue s -> System.Console.Write(s)
 
-let getLine state line =
+let rec getLine state line =
   // TODO: Get a line with a given number from 'state.Program' (this can fail 
   // if the line is not there.) You need this in the 'Goto' command case below.
-  failwith "not implemented"
+  match state.Program with
+    | [] -> None
+    | (l, c) :: rest -> if l = line then Some(l, c) else getLine { Program = rest } line
 
 // ----------------------------------------------------------------------------
 // Evaluator
 // ----------------------------------------------------------------------------
 
 let rec evalExpression expr = 
-  // TODO: Implement evaluation of expressions. The function should take 
-  // 'Expression' and return 'Value'. In this step, it is trivial :-)
-  failwith "not implemented"
+  match expr with
+    | Const v -> v
 
 let rec runCommand state (line, cmd) =
   match cmd with 
   | Print(expr) ->
-      // TODO: Evaluate the expression and print the resulting value here!
-      failwith "not implemented"
+      printValue (evalExpression expr)
       runNextLine state line
   | Run ->
       let first = List.head state.Program    
       runCommand state first
   | Goto(line) ->
-      // TODO: Find the right line of the program using 'getLine' and call 
-      // 'runCommand' recursively on the found line to evaluate it.
-      failwith "not implemented"
-
+      match getLine state line with
+        | None -> failwith "GOTO: line not found"
+        | Some(l, c) -> runCommand state (l, c)
 and runNextLine state line = 
-  // TODO: Find a program line with the number greater than 'line' and evalaute
-  // it using 'evalExpression' (if found) or just return 'state' (if not found).
-  failwith "not implemented"
+  let rec go originalState state =
+    match state.Program.Tail with
+        | [] -> originalState
+        | (l, c)::[] -> if l > line then runCommand state (l, c) else originalState
+        | (l, _)::x::rest -> if l = line then runCommand state x  else go originalState { Program = x::rest }
+  go state state
+
 
 // ----------------------------------------------------------------------------
 // Test cases
