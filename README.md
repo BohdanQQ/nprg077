@@ -7,6 +7,7 @@ Sample tiny systems
 -------------------
 
 * [**TinyML**: A tiny functional programming language interpreter](https://github.com/tpetricek/tiny-systems/tree/master/01-tiny-ml)
+* [**TinyBASIC**: A tiny imperative interactive programming system](https://github.com/tpetricek/tiny-systems/tree/master/02-tiny-basic)
 
 Materials license
 -----------------
