@@ -14,23 +14,24 @@ type Number =
 
 
 let rec occursCheck (v:string) (n:Number) = 
-  // TODO: Check if variable 'v' appears anywhere inside 'n'
-  false
+  match n with
+    | Zero -> false
+    | Succ num -> occursCheck v num
+    | Variable varName -> v = varName
 
 let rec substite (v:string) (subst:Number) (n:Number) =
-  // TODO: Replace all occurrences of variable 'v' in the
-  // number 'n' with the replacement number 'subst'
-  n
+  match n with
+  | Zero -> Zero
+  | Succ num -> Succ (substite v subst num)
+  | Variable varName -> if v = varName then subst else Variable varName 
 
 let substituteConstraints (v:string) (subst:Number) (constraints:list<Number * Number>) = 
-  // TODO: Substitute 'v' for 'subst' (use 'substitute') in 
-  // all numbers in all the constraints in 'constraints'
-  constraints
+  constraints |> List.map (fun (a1, a2) -> ((substite v subst a1) , (substite v subst a2) ) ) 
 
 let substituteAll (subst:list<string * Number>) (n:Number) =
-  // TODO: Perform all substitutions 
-  // specified  in 'subst' on the number 'n'
-  n
+  let f = fun acc (v, subst) ->  (substite v subst acc)
+  in 
+    List.fold f n subst
 
 let rec solve constraints = 
   match constraints with 
