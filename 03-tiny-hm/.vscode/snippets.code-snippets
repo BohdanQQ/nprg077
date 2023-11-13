@@ -1,0 +1,14 @@
+{
+  "inf-date-times": {
+    "prefix": "inf-date-times",
+    "body": [
+      "let dates = ",
+      "  [ DateTime(2020,1,1); DateTime(2021,1,1);",
+      "    DateTime(2022,1,1); DateTime(2023,1,1) ]"
+    ]
+  },
+  "inf-list-len": {
+    "prefix": "inf-list-len",
+    "body": [ "List.fold (fun st _ -> st + 1) 0 l" ]
+  }
+}
