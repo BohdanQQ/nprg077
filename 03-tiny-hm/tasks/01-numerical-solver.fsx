@@ -41,7 +41,8 @@ let rec solve constraints =
   | (Zero, Zero)::constraints -> solve constraints
   | (Succ _, Zero)::_ | (Zero, Succ _)::_ -> 
       failwith "Cannot be solved"
-  | (n, Variable v)::constraints | (Variable v, n)::constraints ->
+  | (n, Variable v)::constraints 
+  | (Variable v, n)::constraints ->
       if occursCheck v n then failwith "Cannot be solved (occurs check)"
       let constraints = substituteConstraints v n constraints
       let subst = solve constraints
@@ -55,6 +56,10 @@ solve
 // Should faild: S(Z) <> Z
 solve 
   [ Succ(Succ(Zero)), Succ(Zero) ]
+
+// Should fail: No 'x' such that S(S(x)) = S(Z)
+solve 
+  [ Succ(Succ(Variable "x")), Succ(Zero) ]
 
 // Not done: Need to substitute x/Z in S(x)
 solve 
