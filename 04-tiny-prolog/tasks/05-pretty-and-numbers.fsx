@@ -67,8 +67,6 @@ and unify t1 t2 =
 // Pretty printing terms
 // ----------------------------------------------------------------------------
 
-let (|Even|Odd|) input = if input % 2 = 0 then Even else Odd
-
 let rec (|Number|_|) term = 
   match term with 
   | Atom("zero") -> Some(0)
