@@ -41,7 +41,7 @@ let rec unifyLists l1 l2 : option<list<string * Term>> =
             | _ -> None
   | _ ->  None
 
-and unify t1 t2 = 
+and unify t1 t2 : option<list<string * Term>> = 
   match t1, t2 with 
   | Atom a1, Atom a2 -> if a1 = a2 then Some [] else None
   | Predicate (p1, l1), Predicate (p2, l2) -> if p1 = p2 then unifyLists l1 l2 else None
