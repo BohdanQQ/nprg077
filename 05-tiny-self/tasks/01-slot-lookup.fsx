@@ -51,16 +51,14 @@ let makeParentSlot n contents =
 // Lookup and message sending
 // ----------------------------------------------------------------------------
 
-// See also §3.3.8 (https://handbook.selflanguage.org/SelfHandbook2017.1.pdf)
+// See also ï¿½3.3.8 (https://handbook.selflanguage.org/SelfHandbook2017.1.pdf)
 // Note that we do not need to keep track of visited objects as we will not
 // create cyclic inheritance graphs in TinySelf.
 
-let rec lookup (msg:string) (obj:Objekt) : list<Slot> = 
-  // TODO: Implement message lookup (as documented in the Self handbook)
-  // * If there is a slot named 'msg' in 'obj', return that 
-  // * Otherwise, return all slots named 'msg' slots in objects 
-  //   contained in all the parent slots of 'obj' (concatenate them)
-  failwith "not implemented!"
+let rec lookup (msg:string) (obj:Objekt) : list<Slot> =  
+   match obj.Slots |> List.filter (fun s -> s.Name = msg) with 
+    | [] -> obj.Slots |> List.filter (fun s -> s.IsParent ) |> List.map (fun s -> lookup msg s.Contents) |> List.concat
+    | s -> s
 
 
 // ----------------------------------------------------------------------------
@@ -115,7 +113,11 @@ larry |> lookup "book" |> printStringSlot
 // TODO: Cheshire cat has a name ("Cheshire Cat") and is 
 // both a cat (with parent 'cat') and fictional character 
 // from a book (with parent 'wonderland')
-let cheshire = failwith "not implemented!"
+let cheshire = makeDataObject [
+    makeSlot "name" (makeString "Cheshire Cat")
+    makeParentSlot "parent*" cat
+    makeParentSlot "parent*" wonderland
+]
 
 // All of these should be OK!
 cheshire |> lookup "name" |> printStringSlot

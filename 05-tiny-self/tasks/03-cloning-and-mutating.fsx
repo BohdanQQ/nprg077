@@ -35,20 +35,29 @@ let makeParentSlot n contents =
 let makeNativeMethod f =
   makeObject [] (makeSpecialObject [] (Native(f)))
 
-// NOTE: Implemented in step #2
-let addSlot n contents obj = failwith "Implemented in step 2"
-let addParentSlot n contents obj = failwith "Implemented in step 2"
-let cloneObject obj = failwith "Implemented in step 2"
+let addSlot (n:string) (contents:Objekt) (obj:Objekt) : unit = 
+  let slot = makeSlot n contents
+  obj.Slots <- slot :: obj.Slots
+
+let addParentSlot (n:string) (contents:Objekt) (obj:Objekt) : unit = 
+  let slot = makeParentSlot n contents
+  obj.Slots <- slot :: obj.Slots
+
+let cloneObject (obj:Objekt) : Objekt = 
+  let result = makeDataObject obj.Slots
+  result.Code <- obj.Code
+  result.Special <- obj.Special
+  result
 
 // ----------------------------------------------------------------------------
 // Lookup and message sending
 // ----------------------------------------------------------------------------
 
-// TODO: To implement assignment, we need to know what object a slot
-// comes from. Modify 'lookup' so that it returns not just the slot,
-// but also the object that the slot comes from.
-let rec lookup msg obj : list<Objekt * Slot> = failwith "to be modified"
-and parentLookup msg obj : list<Objekt * Slot> = failwith "implemented in step 2"
+let rec lookup (msg:string) (obj:Objekt) : list<Objekt * Slot> =  
+   match obj.Slots |> List.filter (fun s -> s.Name = msg) with 
+    | [] -> parentLookup msg obj
+    | s -> s |> List.map (fun x -> (obj, x))
+and parentLookup msg obj : list<Objekt * Slot> = obj.Slots |> List.filter (fun s -> s.IsParent ) |> List.map (fun s -> lookup msg s.Contents) |> List.concat
 
 // TODO: Modify 'send' and 'eval' to also take message send arguments.
 // In Self, the arguments are copied into the activation record. 
@@ -57,17 +66,33 @@ and parentLookup msg obj : list<Objekt * Slot> = failwith "implemented in step 2
 // in the activation record will then give us the value.
 // NOTE: The object newly returned from 'lookup' should be ignored.
 // BEWARE: All arguments are 'Objekt' so it is easy to swap them!! 
+
 let eval (slotValue:Objekt) (args:Objekt) (instance:Objekt) =
-  failwith "to be modified"
-let send (msg:string) (args:Objekt) (instance:Objekt) : Objekt =
-  failwith "to be modified"
+  match slotValue.Code with
+    | None -> slotValue
+    | Some code -> 
+        match code.Special with
+          | Some(Native f) -> 
+            let clone = cloneObject code
+            clone |> addParentSlot "self*" instance
+            clone |> addParentSlot "args*" args
+            f clone
+          | _ -> failwith "Non-native methods not implemented" 
+  
+
+
+let send (msg:string) (args:Objekt) (instance:Objekt) : Objekt = 
+  match lookup msg instance with
+    | [ (_, slot) ] -> eval slot.Contents args instance
+    | _ -> failwithf "Message '%s' not supported by the objekt %A!" msg instance
+
 
 // ----------------------------------------------------------------------------
 // Helpers for testing & object construction
 // ----------------------------------------------------------------------------
 
 let lookupSlotValue n o = 
-  match lookup o n with 
+  match lookup n o with 
   // NOTE: We ignore the object returned by 'lookup' here.
   | [ _, { Contents = it } ] -> it
   | sl -> failwithf "lookupSlotValue: Expected slot '%s' (found %d)!" n sl.Length
@@ -78,32 +103,54 @@ let getStringValue o =
   | _ -> failwith "not a string value"
 
 // NOTE: Implemented in step #2
-let empty = failwith "implemented in step 2"
-let printCode = failwith<Objekt> "implemented in step 2"
-let stringPrototype = failwith<Objekt> "implemented in step 2"
-let makeString s = failwith "implemented in step 2"
+let empty : Objekt = makeDataObject []
+
+let printCode = makeNativeMethod (fun arcd ->
+  printfn "%A" (getStringValue arcd)
+  empty
+)
+
+let stringPrototype = makeDataObject [
+  makeSlot "print" printCode  
+]
+let makeString s = 
+  makeDataObject [ 
+    makeSlot "value" (makeSpecialObject [] (String s))
+    makeParentSlot "parent*" stringPrototype 
+  ]
 
 // ----------------------------------------------------------------------------
 // Cloning and assignments
 // ----------------------------------------------------------------------------
 
-let cloneMethod = makeNativeMethod (fun arcd -> 
+let cloneMethod = makeNativeMethod (fun arcd ->  
   // TODO: The activation record contains a slot 'self*' which is the
   // target object. Use lookup to get it, clone it & retrn it!
+  let target = lookup "self*" arcd
+  match target with
+  | [(_, s)] -> makeDataObject (s.Contents.Slots |> List.map (fun s -> {Contents = s.Contents; Name = s.Name; IsParent = s.IsParent }))
+  | [] -> failwith "error clone - empty"
+  | _ -> failwith "error clone - mult" )
   // (If the lookup returns a wrong thing, fail - that's wrong.)
-  failwith "not implemented" )
 
 let clonablePrototype = 
-  // TODO: Create an object that has the 'clone' method
-  failwith "not implemented"
+  makeDataObject [
+    makeSlot "clone" cloneMethod
+  ]
 
 let assignmentMethod n = makeNativeMethod (fun arcd -> 
-  // TODO: The activation record has a slot named 'n' somewhere in its
-  // inheritance graph and a slot 'new' which is a method argument.
-  // Find those two using 'lookup' and modify the slot value (in the 
-  // that contained it - as returned from lookup). (Tiny)Self assignment 
-  // should return the object that has been modified.
-  failwith "not implemented" )
+  let (obj, _) = 
+    match lookup n arcd with
+      | [x] -> x
+      | _ -> failwith "error lookup asgn target"
+
+  let arg = 
+    match lookup "new" arcd with
+      | [(_, a)] -> a
+      | _ -> failwith "error lookup asgn value" 
+  obj.Slots <- obj.Slots |> List.map (fun sl -> if sl.Name = n then makeSlot n arg.Contents else sl )
+  obj
+)
 
 // Creates an assignment slot for a slot named 'n'
 let makeAssignmentSlot n = 
@@ -145,11 +192,11 @@ ginger |> send "book" empty |> send "print" empty
 // TODO: Write code to change the name of 'ginger' to "Ginger"!
 // (send message "name:" with arument containing slot 'new' with the new value)
 ginger 
-|> failwith "not implemented"
+|> send "name:" (makeDataObject [makeSlot "new" (makeString "Ginger!")]) |> send "name" empty |> send "print" empty
 
 // TODO: Write code to change the book of 'ginger' to "Goodbye, Mog"!
 ginger 
-|> failwith "not implemented"
+|> send "book:" (makeDataObject [makeSlot "new" (makeString "Goodbye, Mog")]) |> send "book" empty |> send "print" empty
 
 // TODO: What do we get if we run the following now?
 mog |> send "name" empty |> send "print" empty

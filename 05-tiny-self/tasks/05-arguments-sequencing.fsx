@@ -36,21 +36,47 @@ let makeNativeMethod f =
   makeObject [] (makeSpecialObject [] (Native(f)))
 
 // NOTE: Implemented in step #2
-let addSlot n contents obj = failwith "Implemented in step 2"
-let addParentSlot n contents obj = failwith "Implemented in step 2"
-let cloneObject obj = failwith "Implemented in step 2"
+let addSlot (n:string) (contents:Objekt) (obj:Objekt) : unit = 
+  let slot = makeSlot n contents
+  obj.Slots <- slot :: obj.Slots
+
+let addParentSlot (n:string) (contents:Objekt) (obj:Objekt) : unit = 
+  let slot = makeParentSlot n contents
+  obj.Slots <- slot :: obj.Slots
+
+let cloneObject (obj:Objekt) : Objekt = 
+  let result = makeDataObject obj.Slots
+  result.Code <- obj.Code
+  result.Special <- obj.Special
+  result
 
 // ----------------------------------------------------------------------------
 // Lookup and message sending
 // ----------------------------------------------------------------------------
 
-let rec lookup msg obj : list<Objekt * Slot> = failwith "implemented in step 3"
-and parentLookup msg obj : list<Objekt * Slot> = failwith "implemented in step 2"
+let rec lookup (msg:string) (obj:Objekt) : list<Objekt * Slot> =  
+   match obj.Slots |> List.filter (fun s -> s.Name = msg) with 
+    | [] -> parentLookup msg obj
+    | s -> s |> List.map (fun x -> (obj, x))
+and parentLookup msg obj : list<Objekt * Slot> = obj.Slots |> List.filter (fun s -> s.IsParent ) |> List.map (fun s -> lookup msg s.Contents) |> List.concat
 
-let eval (slotValue:Objekt) (args:Objekt) (instance:Objekt) =
-  failwith "implemented in step 4"
-let send (msg:string) (args:Objekt) (instance:Objekt) : Objekt =
-  failwith "implemented in step 3"
+let rec eval (slotValue:Objekt) (args:Objekt) (instance:Objekt) =
+  match slotValue.Code with
+    | None -> slotValue
+    | Some code -> 
+        match code.Special with
+          | Some(Native f) -> 
+            let clone = cloneObject code
+            clone |> addParentSlot "self*" instance
+            clone |> addParentSlot "args*" args
+            f clone
+          | Some(String s) -> printf "%s" s; failwith "what"
+          | None -> 
+             send "eval" (makeDataObject [ makeSlot "activation" (makeDataObject [ makeParentSlot "self*" instance; makeParentSlot "args*" args ]) ]) code
+and send (msg:string) (args:Objekt) (instance:Objekt) : Objekt = 
+  match lookup msg instance with
+    | [ (_, slot) ] -> eval slot.Contents args instance
+    | _ -> failwithf "Message '%s' not supported by the objekt %A!" msg instance
 
 // ----------------------------------------------------------------------------
 // Helpers for testing & object construction
@@ -59,7 +85,7 @@ let send (msg:string) (args:Objekt) (instance:Objekt) : Objekt =
 let lookupSlotValue n o = 
   match lookup n o with 
   | [ _, { Contents = it } ] -> it
-  | sl -> failwithf "lookupSlotValue: Expected slot '%s' (found %d)!" n sl.Length
+  | sl -> failwithf "lookupSlotValue: Expected slot '%s' (found %d in %A)!" n sl.Length sl
 
 let getStringValue o = 
   match lookupSlotValue "value" o with
@@ -67,29 +93,82 @@ let getStringValue o =
   | _ -> failwith "not a string value"
 
 // NOTE: Implemented in step #2
-let empty = failwith "implemented in step 2"
-let printCode = failwith<Objekt> "implemented in step 2"
-let stringPrototype = failwith<Objekt> "implemented in step 2"
-let makeString s = failwith "implemented in step 2"
+let empty : Objekt = makeDataObject []
 
+let printCode = makeNativeMethod (fun arcd ->
+  printf "%s" (getStringValue arcd)
+  empty
+)
+
+let stringPrototype = makeDataObject [
+  makeSlot "print" printCode  
+]
+let makeString s = 
+  makeDataObject [ 
+    makeSlot "value" (makeSpecialObject [] (String s))
+    makeParentSlot "parent*" stringPrototype 
+  ]
 // ----------------------------------------------------------------------------
 // Cloning and assignments
 // ----------------------------------------------------------------------------
 
-let cloneMethod = failwith<Objekt> "implemented in step 3"
-let clonablePrototype = failwith<Objekt> "implemented in step 3"
+let cloneMethod = makeNativeMethod (fun arcd ->  
+  let target = lookup "self*" arcd
+  match target with
+  | [(_, s)] -> makeDataObject (s.Contents.Slots |> List.map (fun s -> {Contents = s.Contents; Name = s.Name; IsParent = s.IsParent }))
+  | [] -> failwith "error clone - empty"
+  | _ -> failwith "error clone - mult" )
+  // (If the lookup returns a wrong thing, fail - that's wrong.)
 
-let assignmentMethod n = failwith "implemented in step 3"
-let makeAssignmentSlot n = failwith "implemented in step 3"
+let clonablePrototype = 
+  makeDataObject [
+    makeSlot "clone" cloneMethod
+  ]
+
+let assignmentMethod n = makeNativeMethod (fun arcd -> 
+  let (obj, _) = 
+    match lookup n arcd with
+      | [x] -> x
+      | _ -> failwith "error lookup asgn target"
+
+  let arg = 
+    match lookup "new" arcd with
+      | [(_, a)] -> a
+      | _ -> failwith "error lookup asgn value" 
+  obj.Slots <- obj.Slots |> List.map (fun sl -> if sl.Name = n then makeSlot n arg.Contents else sl )
+  obj
+)
+
+let makeAssignmentSlot n = 
+  { Name = n + ":"; Contents = assignmentMethod n; IsParent = false }
 
 // ----------------------------------------------------------------------------
 // TinySelf code representation & interpreter
 // ----------------------------------------------------------------------------
 
-let exprSelf = failwith<Objekt> "implemented in step 4"
-let exprString (s:string) = failwith "implemented in step 4"
-let exprSend msg rcv = failwith "implemented in step 4"
+let exprSelf = makeDataObject [
+    makeSlot "eval" (makeNativeMethod (fun arcd -> 
+       lookupSlotValue "self*" (lookupSlotValue "activation" arcd)
+    ))
+]
 
+let exprString (s:string) = makeDataObject [ 
+  makeSlot "string" (makeString s) 
+  makeSlot "eval" (makeNativeMethod (fun arcd ->
+    lookupSlotValue "string" arcd
+  )) ]
+
+let exprSend msg rcv = makeDataObject [ 
+  makeSlot "receiver" rcv
+  makeSlot "msg" (makeString msg) 
+  makeSlot "eval" (makeNativeMethod (fun arcd -> 
+    let actr = lookupSlotValue "activation" arcd
+    let dObj = makeDataObject [ makeSlot "activation" actr ]
+    let msgName = getStringValue (lookupSlotValue "msg" arcd)
+    let receiver = lookupSlotValue "receiver" arcd
+    let evalueatedRcvr = send "eval" dObj receiver
+    send msgName empty evalueatedRcvr 
+  )) ]
 
 // TODO: This one is done for you. 'exprSelf' gives you access to the
 // object on which a method is called, but if we want to get method
@@ -106,9 +185,13 @@ let exprSeq e1 e2 = makeDataObject [
   makeSlot "e2" e2
   makeSlot "eval" (makeNativeMethod (fun msg ->
     // TODO: Construct the activation record to be passed to recursive
-    // 'eval' calls (as in 'exprSend'), recursively evaluate 'e1',
+    // 'eval' calls (as in 'exprSend'), 
+    let actr = lookupSlotValue "activation" msg
+    let dObj = makeDataObject [ makeSlot "activation" actr ]
+    //recursively evaluate 'e1',
     // ignore the result, then recursively evaluate 'e2' & return the result
-    failwith "not implemented"
+    send "eval" dObj (lookupSlotValue "e1" msg) 
+    send "eval" dObj (lookupSlotValue "e2" msg)
   )) ]
   
 let exprSendWith msg args rcv = makeDataObject [ 
@@ -120,7 +203,15 @@ let exprSendWith msg args rcv = makeDataObject [
     // take arguments. Do the same as in 'exprSend' - but before sending,
     // retrieve 'args' and create a new data object that contains the results
     // of recursively evaluating all the argument expressions in 'args'
-    failwith "not implemented"
+    let actr = lookupSlotValue "activation" msg
+    let dObj = makeDataObject [ makeSlot "activation" actr ]
+    let msgName = getStringValue (lookupSlotValue "msg" msg)
+    let receiver = lookupSlotValue "receiver" msg
+    let argsSlot = lookupSlotValue "args" msg
+    let evalueatedRcvr = send "eval" dObj receiver
+    // evaluate receiver in the same context as its arguments (dObj reuse)
+    let evalArgs: Objekt = makeDataObject (argsSlot.Slots |> List.map (fun x -> ( makeSlot x.Name ( send "eval" dObj x.Contents)) ))
+    send msgName evalArgs evalueatedRcvr 
   )) ]
   
 // ----------------------------------------------------------------------------
@@ -138,7 +229,7 @@ let greeterObj = makeDataObject [
   makeSlot "greet" (makeObject [] (
     ( exprString "Hello " |> exprSend "print" ) ++
     ( exprImplicit |> exprSend "name" |> exprSend "print" ) ++
-    ( exprString "!!" |> exprSend "print" )
+    ( exprString "!!\n" |> exprSend "print" )
   )) 
 ]
 
