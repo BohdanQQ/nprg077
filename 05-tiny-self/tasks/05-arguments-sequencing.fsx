@@ -175,15 +175,15 @@ let exprSend msg rcv = makeDataObject [
 // arguments, those will be stored in the activation record. We get them
 // by sending message (with the argument name) to 'exprImplicit'
 let exprImplicit = makeDataObject [
-  makeSlot "eval" (makeNativeMethod (fun msg ->
-    msg |> lookupSlotValue "activation" 
+  makeSlot "eval" (makeNativeMethod (fun arcd ->
+    arcd |> lookupSlotValue "activation" 
   )) ]
 
 
 let exprSeq e1 e2 = makeDataObject [ 
   makeSlot "e1" e1
   makeSlot "e2" e2
-  makeSlot "eval" (makeNativeMethod (fun msg ->
+  makeSlot "eval" (makeNativeMethod (fun arcd ->
     // TODO: Construct the activation record to be passed to recursive
     // 'eval' calls (as in 'exprSend'), 
     let actr = lookupSlotValue "activation" msg
@@ -198,7 +198,7 @@ let exprSendWith msg args rcv = makeDataObject [
   makeSlot "receiver" rcv
   makeSlot "args" (makeDataObject [ for k, v in args -> makeSlot k v ])
   makeSlot "msg" (makeString msg) 
-  makeSlot "eval" (makeNativeMethod (fun msg -> 
+  makeSlot "eval" (makeNativeMethod (fun arcd -> 
     // TODO: This is like 'exprSend' but the method now optionally can 
     // take arguments. Do the same as in 'exprSend' - but before sending,
     // retrieve 'args' and create a new data object that contains the results
