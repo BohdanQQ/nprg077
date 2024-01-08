@@ -32,14 +32,30 @@ let rec eval (sheet:LiveSheet) expr =
   // TODO: Modify the 'Reference' case. Instead of recursively calling 
   // 'eval', this should now locate the graph node and return the 'Value'
   // that is stored in the graph node!
-  failwith "implemented in step 1"
-  
+  match expr with
+    | Const v -> v
+    | Function (name, args) -> 
+        match name, args with
+          | "+", [lArg; rArg] ->
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left + right)
+                | _ -> Error "Invalid arguments (+)"
+          | "*", [lArg; rArg] -> 
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left * right)
+                | _ -> Error "Invalid arguments (*)"
+          | _ -> Error "Unknown function"
+    | Reference addr -> 
+        match Map.tryFind addr sheet with
+          | Some cellNode -> cellNode.Value
+          | None -> Error "Missing value"
 
 let makeNode (sheet:LiveSheet) (expr:Expr) : CellNode = 
   // TODO: Create a dependency graph node. In this step, we just want
   // to get the same functionality as before (i.e., no event handling)
   // so evaluate the expression, store it and return the node.
-  failwith "not implemented"
+  let value = eval sheet expr
+  { Value = value; Expr = expr } 
 
 
 let makeSheet (list:(Address * Expr) list) : LiveSheet = 
@@ -48,7 +64,7 @@ let makeSheet (list:(Address * Expr) list) : LiveSheet =
   // cells one by one (we should make sure that all cells on which the new one
   // depends are already in the sheet, but we assume examples are given
   // in a correct order). To do this, use 'List.fold' and 'makeNode'. 
-  failwith "not implemented"
+  List.fold (fun sheet (addr, expr) -> Map.add addr (makeNode sheet expr) sheet) Map.empty list
 
 
 // ----------------------------------------------------------------------------
@@ -56,21 +72,34 @@ let makeSheet (list:(Address * Expr) list) : LiveSheet =
 // ----------------------------------------------------------------------------
 
 let rec relocateReferences (srcCol, srcRow) (tgtCol, tgtRow) (srcExpr:Expr) = 
-  failwith "implemented in step 2"
+  let diffCol = tgtCol - srcCol
+  let diffRow = tgtRow - srcRow
 
+  match srcExpr with
+    | Const v -> Const v
+    | Function (name, args) -> 
+        Function (name, List.map (relocateReferences (srcCol, srcRow) (tgtCol, tgtRow)) args)
+    | Reference (srcCol, srcRow) -> Reference (srcCol + diffCol, srcRow + diffRow)
 
 let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:LiveSheet) : LiveSheet = 
   // TODO: This needs to call 'makeNode' and add the resulting node, 
   // instead of just adding the expression to the map as is.
-  failwith "implemented in step 2"
-
+  let formulae = [ 
+    for col in srcCol .. tgtCol do
+      for row in srcRow .. tgtRow do
+        yield (col, row), relocateReferences (srcCol, srcRow) (col, row) (Map.find (srcCol, srcRow) sheet).Expr]
+  formulae |> List.fold (fun sheet (addr, expr) -> Map.add addr (makeNode sheet expr) sheet) sheet
 
 // ----------------------------------------------------------------------------
 // Helpers and test cases
 // ----------------------------------------------------------------------------
 
 let addr (s:string) = 
-  failwith "implemented in step 1"
+  if s.Length < 2 then failwith "Invalid address"
+  let column = int s.[0] - int 'A' + 1
+  let row = int s.[1..]
+  column, row
+
 
 let fib =  
   [ addr "A1", Const(Number 0) 
@@ -100,7 +129,7 @@ let fac =
 
 // Should return: Number 5
 eval fac (Reference(addr "A6"))
-// Should return: Number 12
+// Should return: Number 120
 eval fac (Reference(addr "B6"))
 
 // Should return: Number 10

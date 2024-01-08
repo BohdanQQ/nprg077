@@ -27,16 +27,50 @@ type LiveSheet = Map<Address, CellNode>
 // Reactive evaluation and graph construction
 // ----------------------------------------------------------------------------
 
+let safeDiv a b = 
+  if b = 0 then None else Some(a / b)
+
 let rec eval (sheet:LiveSheet) expr = 
-  failwith "implemented in step 1 and 3"
-  
+  match expr with
+    | Const v -> v
+    | Function (name, args) -> 
+        match name, args with
+          | "+", [lArg; rArg] ->
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left + right)
+                | _ -> Error "Invalid arguments (+)"
+          | "*", [lArg; rArg] -> 
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left * right)
+                | _ -> Error "Invalid arguments (*)"
+          | "-" , [lArg; rArg] -> 
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left - right)
+                | _ -> Error "Invalid arguments (-)"
+          | "/" , [lArg; rArg] ->
+                match eval sheet lArg, eval sheet rArg with
+                    | Number left, Number right -> 
+                        match safeDiv left right with
+                            | Some result -> Number result
+                            | None -> Error "Zero division"
+                    | _ -> Error "Invalid arguments (/)"
+          | _ -> Error "Unknown function"
+    | Reference addr -> 
+        match Map.tryFind addr sheet with
+          | Some cellNode -> cellNode.Value
+          | None -> Error "Missing value"  
 
 let rec collectReferences (expr:Expr) : Address list = 
   // TODO: Collect the addresses of all references that appear in the 
   // expression 'expr'. This needs to call itself recursively for all
   // arguments of 'Function' and concatenate the returned lists.
   // HINT: This looks nice if you use 'List.collect'.
-  failwith "not implemented"
+
+  List.collect (fun arg -> 
+    match arg with
+      | Reference addr -> [addr]
+      | Function (_, args) -> List.map collectReferences args |> List.concat
+      | _ -> []) [expr]
 
 
 let makeNode (sheet:LiveSheet) expr = 
@@ -52,29 +86,55 @@ let makeNode (sheet:LiveSheet) expr =
   //   this one depends and add 'update' as the handler of their 
   //   'Updated' event
   //
-  failwith "partly implemented in step 3"
 
+  let value = eval sheet expr
+  let result = { Value = value; Expr = expr; Updated = Event<unit>() }
+  let updateFn = fun _ -> 
+    let newValue = eval sheet expr
+    result.Value <- newValue
+    result.Updated.Trigger()
+
+  collectReferences expr |> List.iter (fun addr -> 
+    match Map.tryFind addr sheet with
+      | Some cellNode -> cellNode.Updated.Publish.Add(updateFn)
+      | None -> failwith "Cell address invalid")
+  result
 
 let updateNode addr (sheet:LiveSheet) expr = 
   // TODO: For now, we ignore the fact that the new expression may have
   // different set of references than the one we are replacing. 
   // So, we can just get the node, set the new expression and value
   // and trigger the Updated event!
-  failwith "not implemented"
+
+  let node = Map.find addr sheet
+  node.Expr <- expr
+  node.Value <- eval sheet expr
+  node.Updated.Trigger()
 
 
 let makeSheet list = 
-  failwith "implemented in step 3"
+  List.fold (fun sheet (addr, expr) -> Map.add addr (makeNode sheet expr) sheet) Map.empty list
 
 // ----------------------------------------------------------------------------
 // Drag down expansion
 // ----------------------------------------------------------------------------
 
 let rec relocateReferences (srcCol, srcRow) (tgtCol, tgtRow) (srcExpr:Expr) = 
-  failwith "implemented in step 2"
+  let diffCol = tgtCol - srcCol
+  let diffRow = tgtRow - srcRow
+
+  match srcExpr with
+    | Const v -> Const v
+    | Function (name, args) -> 
+        Function (name, List.map (relocateReferences (srcCol, srcRow) (tgtCol, tgtRow)) args)
+    | Reference (srcCol, srcRow) -> Reference (srcCol + diffCol, srcRow + diffRow)
 
 let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:LiveSheet) : LiveSheet = 
-  failwith "implemented in step 2 and 3"
+  let formulae = [ 
+    for col in srcCol .. tgtCol do
+      for row in srcRow .. tgtRow do
+        yield (col, row), relocateReferences (srcCol, srcRow) (col, row) (Map.find (srcCol, srcRow) sheet).Expr]
+  formulae |> List.fold (fun sheet (addr, expr) -> Map.add addr (makeNode sheet expr) sheet) sheet
 
 
 // ----------------------------------------------------------------------------
@@ -82,7 +142,10 @@ let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:LiveSheet) : LiveSheet =
 // ----------------------------------------------------------------------------
 
 let addr (s:string) = 
-  failwith "implemented in step 1"
+  if s.Length < 2 then failwith "Invalid address"
+  let column = int s.[0] - int 'A' + 1
+  let row = int s.[1..]
+  column, row
 
 // Simple spreadsheet that performs conversion between Celsius and Fahrenheit
 // To convert F to C, we put value in F into B1 and read the result in C1
@@ -99,7 +162,12 @@ let tempConv =
     addr "A2", Const(String "C to F")
     addr "B2", Const(Number 0) 
     // TODO: Add formula for Celsius to Fahrenheit conversion to 'C2'
-    addr "C2", Const(Error "not implemented") ]
+    addr "C2",  Function("+", [ 
+        Function("/", [ 
+          Function("*", [ Reference(addr "B2"); Const(Number 9) ])
+          Const(Number 5) ])
+        Const(Number 32) ])
+  ] 
   |> makeSheet
 
 // Fahrenheit to Celsius conversions

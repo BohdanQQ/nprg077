@@ -26,7 +26,15 @@ let rec relocateReferences (srcCol, srcRow) (tgtCol, tgtRow) (srcExpr:Expr) =
   // to address (tgtRow, tgtCol). So for example, if a formula 'A1+A2' is
   // moved from 'A3' to 'B10' then it should change to 'B8+B9' (address
   // is incremented by column difference 1 and row difference 7)
-  failwith "not implemented!"
+  
+  let diffCol = tgtCol - srcCol
+  let diffRow = tgtRow - srcRow
+
+  match srcExpr with
+    | Const v -> Const v
+    | Function (name, args) -> 
+        Function (name, List.map (relocateReferences (srcCol, srcRow) (tgtCol, tgtRow)) args)
+    | Reference (srcCol, srcRow) -> Reference (srcCol + diffCol, srcRow + diffRow)
 
 
 let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:Sheet) : Sheet = 
@@ -39,7 +47,12 @@ let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:Sheet) : Sheet =
   // but you need to figure out the right syntax! Once you generate
   // new cells, you can add them to the Map using List.fold (with the 
   // sheet as the current state, updated in each step using Map.add).
-  failwith "not implemented!"
+  
+  let formulae = [ 
+    for col in srcCol .. tgtCol do
+      for row in srcRow .. tgtRow do
+        yield (col, row), relocateReferences (srcCol, srcRow) (col, row) (Map.find (srcCol, srcRow) sheet)]
+  formulae |> List.fold (fun sheet (addr, expr) -> Map.add addr expr sheet) sheet
 
 
 // ----------------------------------------------------------------------------
@@ -47,7 +60,24 @@ let expand (srcCol, srcRow) (tgtCol, tgtRow) (sheet:Sheet) : Sheet =
 // ----------------------------------------------------------------------------
 
 let rec eval (sheet:Sheet) expr = 
-  failwith "implemented in step 1"
+  match expr with
+    | Const v -> v
+    | Function (name, args) -> 
+        match name, args with
+          | "+", [lArg; rArg] ->
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left + right)
+                | _ -> Error "Invalid arguments (+)"
+          | "*", [lArg; rArg] -> 
+              match eval sheet lArg, eval sheet rArg with
+                | Number left, Number right -> Number (left * right)
+                | _ -> Error "Invalid arguments (*)"
+          | _ -> Error "Unknown function"
+    | Reference addr -> 
+        match Map.tryFind addr sheet with
+          | Some expr -> eval sheet expr
+          | None -> Error "Missing value"
+
 
 
 // ----------------------------------------------------------------------------
@@ -55,7 +85,11 @@ let rec eval (sheet:Sheet) expr =
 // ----------------------------------------------------------------------------
 
 let addr (s:string) = 
-  failwith "implemented in step 1"
+  if s.Length < 2 then failwith "Invalid address"
+  let column = int s.[0] - int 'A' + 1
+  let row = int s.[1..]
+  column, row
+
 
 
 let fib =  
